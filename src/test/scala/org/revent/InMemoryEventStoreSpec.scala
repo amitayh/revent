@@ -13,7 +13,7 @@ class InMemoryEventStoreSpec extends EventStoreContract[Try] {
     new InMemoryEventStore[ExampleStream](clock)
 
   override val matchers = EventStoreTryMatchers
-  
-  override val M: MonadThrowable[Try] = catsStdInstancesForTry
+
+  override val monadInstance: MonadThrowable[Try] = catsStdInstancesForTry
 
 }

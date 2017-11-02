@@ -110,15 +110,7 @@ class CassandraEventStore[ES <: EventStream]
     private def createBatch(expectedVersion: Int, events: Seq[Event[ES]]): BatchStatement = {
       val initialBatch = createInitialBatch(expectedVersion, events.last.version)
       events.foldLeft(initialBatch) { (batch, event) =>
-        val payload = encoder(event.payload)
-        val statement = insertEvents.bind(
-          streamId.toString,
-          Int.box(event.version),
-          event.name,
-          Printer.noSpaces.prettyByteBuffer(payload),
-          Long.box(event.timestamp.toEpochMilli)
-        )
-        batch.add(statement)
+        batch.add(insertEventStatement(event))
       }
     }
 
@@ -131,6 +123,17 @@ class CassandraEventStore[ES <: EventStream]
           streamId.toString,
           savedExpectedVersion.map(Int.box).orNull
         )
+      )
+    }
+
+    private def insertEventStatement(event: Event[ES]): Statement = {
+      val payload = encoder(event.payload)
+      insertEvents.bind(
+        streamId.toString,
+        Int.box(event.version),
+        event.name,
+        Printer.noSpaces.prettyByteBuffer(payload),
+        Long.box(event.timestamp.toEpochMilli)
       )
     }
 

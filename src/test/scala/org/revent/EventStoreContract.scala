@@ -3,6 +3,7 @@ package org.revent
 import java.time.{Clock, Instant, ZoneOffset}
 import java.util.UUID
 
+import cats.implicits._
 import org.specs2.matcher.{Matcher, Matchers}
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
@@ -24,12 +25,12 @@ trait EventStoreContract[F[_]] extends Specification {
 
   val matchers: EventStoreMatchers[F]
 
-  val M: MonadThrowable[F]
+  implicit val monadInstance: MonadThrowable[F]
 
   import matchers.{fail, failWith, succeed, succeedWith}
 
   implicit class ChainingOps[T](a: F[T]) {
-    def andThen(b: => F[T]): F[T] = M.flatMap(M.attempt(a))(_ => b)
+    def andThen(b: => F[T]): F[T] = a.attempt.flatMap(_ => b)
   }
 
   "Event store" should {
@@ -148,14 +149,19 @@ trait EventStoreContract[F[_]] extends Specification {
       val events = eventPayload1 :: eventPayload2 :: eventPayload3 :: eventPayload4 :: Nil
       val persist = store.persist(streamId, events, Some(0))
 
-      val read1 = persist andThen store.read(streamId, 0, 1)
-      read1 must succeedWith(contain(exactly(event1)))
+      val read1 = persist andThen store.read(streamId, 1, 3)
+      read1 must succeedWith(contain(exactly(event1, event2, event3)))
 
-      val read2 = persist andThen store.read(streamId, 1, 3)
-      read2 must succeedWith(contain(exactly(event1, event2, event3)))
+      val read2 = persist andThen store.read(streamId, 4, 3)
+      read2 must succeedWith(contain(exactly(event4)))
+    }
 
-      val read3 = persist andThen store.read(streamId, 4, 3)
-      read3 must succeedWith(contain(exactly(event4)))
+    "allow fetching from beginning of stream with version 0 (same as from version 1)" in new Context {
+      val result =
+        store.persist(streamId, eventPayload1 :: eventPayload2 :: Nil) andThen
+          store.read(streamId, 0, 1)
+
+      result must succeedWith(contain(exactly(event1)))
     }
   }
 

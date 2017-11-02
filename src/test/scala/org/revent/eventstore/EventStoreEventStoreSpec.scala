@@ -25,7 +25,7 @@ class EventStoreEventStoreSpec extends EventStoreContract[Future] with EventStor
 
   override val matchers = EventStoreFutureMatchers
 
-  override val M: MonadThrowable[Future] =
+  override val monadInstance: MonadThrowable[Future] =
     catsStdInstancesForFuture(executionContext)
 
 }

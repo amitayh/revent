@@ -16,7 +16,7 @@ class ReplayingAggregateRepository[F[_], P <: Protocol]
   (eventStream: EventStreamReader[F, P#EventStream],
    reducer: AggregateReducer[P],
    pageSize: Int = ReplayingAggregateRepository.DefaultPageSize)
-  (implicit M: MonadThrowable[F]) extends AggregateRepository[F, P] {
+  (implicit mi: MonadThrowable[F]) extends AggregateRepository[F, P] {
 
   type Events = Seq[Event[P#EventStream]]
   type Snapshot = AggregateSnapshot[P#Aggregate]
@@ -25,16 +25,16 @@ class ReplayingAggregateRepository[F[_], P <: Protocol]
 
   override def load(aggregateId: P#EventStreamId,
                     expectedVersion: Option[Int]): F[Snapshot] = {
-    snapshotFor(aggregateId) flatMap { snapshot =>
-      if (snapshot.conformsTo(expectedVersion)) M.pure(snapshot)
-      else M.raiseError(new VersionMismatch(aggregateId, expectedVersion, snapshot.version))
+    reconstituteFromEvents(aggregateId) flatMap { snapshot =>
+      if (snapshot.conformsTo(expectedVersion)) snapshot.pure
+      else mi.raiseError(new VersionMismatch(aggregateId, expectedVersion, snapshot.version))
     }
   }
 
-  private def snapshotFor(streamId: P#EventStreamId): F[Snapshot] = {
+  private def reconstituteFromEvents(streamId: P#EventStreamId): F[Snapshot] = {
     def go(page: F[Events], snapshot: Snapshot): F[Snapshot] = page flatMap { events =>
       val updatedSnapshot = events.foldLeft(snapshot)(snapshotReducer.handle)
-      if (events.size < pageSize) M.pure(updatedSnapshot)
+      if (events.size < pageSize) updatedSnapshot.pure
       else go(nextPage(streamId, events), updatedSnapshot)
     }
 

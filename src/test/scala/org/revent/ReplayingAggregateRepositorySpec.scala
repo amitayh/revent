@@ -9,7 +9,7 @@ import org.specs2.specification.Scope
 
 import scala.util.Try
 
-class ReplayingEventSourcedRepositorySpec extends Specification {
+class ReplayingAggregateRepositorySpec extends Specification {
 
   "Replaying event sourced repository" should {
     trait Context extends Scope {
