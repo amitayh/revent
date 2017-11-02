@@ -3,7 +3,7 @@ package org.revent
 import java.time.{Clock, Instant, ZoneOffset}
 import java.util.UUID
 
-import org.specs2.matcher.Matcher
+import org.specs2.matcher.{Matcher, Matchers}
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 
@@ -22,19 +22,11 @@ trait EventStoreContract[F[_]] extends Specification {
 
   def createStore(clock: Clock): EventStore[F, ExampleStream]
 
-  val matchers: EventStoreMatchers
+  val matchers: EventStoreMatchers[F]
 
   val M: MonadThrowable[F]
 
-  import matchers._
-
-  trait EventStoreMatchers {
-    type Result = Seq[Event[ExampleStream]]
-    def succeed: Matcher[F[Result]] = not(fail)
-    def succeedWith(value: Matcher[Result]): Matcher[F[Result]]
-    def fail: Matcher[F[Result]]
-    def failWith[E <: Throwable](implicit ct: ClassTag[E]): Matcher[F[Result]]
-  }
+  import matchers.{fail, failWith, succeed, succeedWith}
 
   implicit class ChainingOps[T](a: F[T]) {
     def andThen(b: => F[T]): F[T] = M.flatMap(M.attempt(a))(_ => b)
@@ -174,4 +166,12 @@ case class ExampleEvent(name: String)
 trait ExampleStream extends EventStream {
   override type Id = UUID
   override type Payload = ExampleEvent
+}
+
+trait EventStoreMatchers[F[_]] extends Matchers {
+  type Result = Seq[Event[ExampleStream]]
+  def succeed: Matcher[F[Result]] = not(fail)
+  def succeedWith(value: Matcher[Result]): Matcher[F[Result]]
+  def fail: Matcher[F[Result]]
+  def failWith[E <: Throwable](implicit ct: ClassTag[E]): Matcher[F[Result]]
 }

@@ -4,14 +4,12 @@ import java.time.Clock
 
 import cats.instances.future._
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import org.revent.testkit.EventStoreFutureMatchers
 import org.revent.{EventStoreContract, ExampleStream, MonadThrowable}
-import org.specs2.concurrent.ExecutionEnv
-import org.specs2.matcher.Matcher
 
 import scala.collection.immutable.Seq
 import scala.concurrent.ExecutionContext.Implicits.{global => executionContext}
 import scala.concurrent.Future
-import scala.reflect.ClassTag
 
 class CassandraEventStoreSpec extends EventStoreContract[Future] with CassandraDockerTestKit {
 
@@ -45,13 +43,7 @@ class CassandraEventStoreSpec extends EventStoreContract[Future] with CassandraD
       clock)(executionContext)
   }
 
-  override val matchers = new EventStoreMatchers {
-    implicit val executionEnv = ExecutionEnv.fromExecutionContext(executionContext)
-    override def succeedWith(matcher: Matcher[Result]): Matcher[Future[Result]] = matcher.await
-    override def fail: Matcher[Future[Result]] = throwA[Throwable].await
-    override def failWith[E <: Throwable](implicit ct: ClassTag[E]): Matcher[Future[Result]] =
-      throwA[E].await
-  }
+  override val matchers = EventStoreFutureMatchers
 
   override val M: MonadThrowable[Future] =
     catsStdInstancesForFuture(executionContext)
