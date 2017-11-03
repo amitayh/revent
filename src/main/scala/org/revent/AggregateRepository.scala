@@ -1,53 +1,43 @@
 package org.revent
 
 import cats.implicits._
-import org.revent.AggregateSnapshot.InitialVersion
 import org.revent.Reducer.AggregateReducer
+import org.revent.ReplayingAggregateRepository._
 
-import scala.collection.immutable.Seq
 import scala.language.higherKinds
 
 trait AggregateRepository[F[_], P <: Protocol] {
+  type Snapshot = AggregateSnapshot[P#Aggregate]
+
   def load(aggregateId: P#EventStreamId,
-           expectedVersion: Option[Int] = None): F[AggregateSnapshot[P#Aggregate]]
+           expectedVersion: Option[Int] = None): F[Snapshot]
 }
 
 class ReplayingAggregateRepository[F[_], P <: Protocol]
   (eventStream: EventStreamReader[F, P#EventStream],
    reducer: AggregateReducer[P],
-   pageSize: Int = ReplayingAggregateRepository.DefaultPageSize)
+   pageSize: Int = DefaultPageSize)
   (implicit mi: MonadThrowable[F]) extends AggregateRepository[F, P] {
-
-  type Events = Seq[Event[P#EventStream]]
-  type Snapshot = AggregateSnapshot[P#Aggregate]
 
   private val snapshotReducer = new SnapshotReducer[P](reducer)
 
   override def load(aggregateId: P#EventStreamId,
                     expectedVersion: Option[Int]): F[Snapshot] = {
-    reconstituteFromEvents(aggregateId) flatMap { snapshot =>
-      if (snapshot.conformsTo(expectedVersion)) snapshot.pure
+    reconstituteFromEvents(aggregateId).flatMap { snapshot =>
+      if (snapshot.conformsTo(expectedVersion)) mi.pure(snapshot)
       else mi.raiseError(new VersionMismatch(aggregateId, expectedVersion, snapshot.version))
     }
   }
 
   private def reconstituteFromEvents(streamId: P#EventStreamId): F[Snapshot] = {
-    def go(page: F[Events], snapshot: Snapshot): F[Snapshot] = page flatMap { events =>
-      val updatedSnapshot = events.foldLeft(snapshot)(snapshotReducer.handle)
-      if (events.size < pageSize) updatedSnapshot.pure
-      else go(nextPage(streamId, events), updatedSnapshot)
+    mi.tailRecM(snapshotReducer.empty) { snapshot =>
+      val nextVersion = snapshot.version + 1
+      eventStream.read(streamId, nextVersion, pageSize).map { events =>
+        val consumedAllEvents = events.size < pageSize
+        val updatedSnapshot = events.foldLeft(snapshot)(snapshotReducer.handle)
+        if (consumedAllEvents) Right(updatedSnapshot) else Left(updatedSnapshot)
+      }
     }
-
-    go(firstPage(streamId), snapshotReducer.empty)
-  }
-
-  private def firstPage(streamId: P#EventStreamId): F[Events] =
-    eventStream.read(streamId, InitialVersion, pageSize)
-
-  private def nextPage(streamId: P#EventStreamId, events: Events): F[Events] = {
-    val lastVersion = events.last.version
-    val nextVersion = lastVersion + 1
-    eventStream.read(streamId, nextVersion, pageSize)
   }
 
 }

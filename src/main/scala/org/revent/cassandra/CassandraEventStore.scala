@@ -68,7 +68,9 @@ class CassandraEventStore[ES <: EventStream]
     }
 
     private def eventPayload(row: Row): Try[ES#Payload] = {
-      parseByteBuffer(row.getBytes("event_data")).flatMap(decoder.decodeJson).toTry
+      parseByteBuffer(row.getBytes("event_data"))
+        .flatMap(decoder.decodeJson)
+        .toTry
     }
 
   }
