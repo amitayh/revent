@@ -1,0 +1,42 @@
+package org.revent.cqrs
+
+import java.time.{Clock, Instant, ZoneOffset}
+
+import cats.instances.try_._
+import org.revent.testkit.text._
+import org.revent.{Event, InMemoryEventStore, ReplayingAggregateRepository}
+import org.specs2.mock.Mockito
+import org.specs2.mutable.Specification
+import org.specs2.specification.Scope
+
+import scala.util.Try
+
+class EventSourcedCommandHandlerSpec extends Specification with Mockito {
+
+  "Event sourced command handler" should {
+    trait Context extends Scope {
+      val now = Instant.now()
+      val clock = Clock.fixed(now, ZoneOffset.UTC)
+      val eventStore = spy(new InMemoryEventStore[SentenceStream](clock))
+      val repository = new ReplayingAggregateRepository[Try, SentenceProtocol](eventStore, SentenceReducer)
+
+      val handler = new EventSourcedCommandHandler[Try, SentenceProtocol](repository, eventStore)
+    }
+
+    "persist events produced from applying a command on an aggregate" in new Context {
+      val aggregateId = 1
+      eventStore.persist(aggregateId, WordAdded("foo") :: Nil)
+
+      val word = "bar"
+      val event = WordAdded(word)
+      val command = AddWord(word)
+      val expectedVersion = Some(1)
+
+      handler(EventSourcedCommand[Try, SentenceProtocol](aggregateId, command, expectedVersion)) must
+        beSuccessfulTry(Event[SentenceStream](aggregateId, 2, event, now) :: Nil)
+
+      there was one(eventStore).persist(aggregateId, event :: Nil, expectedVersion)
+    }
+  }
+
+}
