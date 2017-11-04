@@ -104,7 +104,7 @@ class CassandraEventStore[ES <: EventStream]
       val batch = createBatch(expectedVersion, eventStream)
       val result = session.execute(batch)
       if (!result.wasApplied()) {
-        throw new ConcurrentModificationException()
+        throw new ConcurrentModificationException(s"Unable to persist events to stream $streamId")
       }
       eventStream
     }
