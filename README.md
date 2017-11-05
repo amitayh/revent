@@ -1,4 +1,4 @@
-# Revent [![Build Status](https://travis-ci.org/amitayh/revent.svg?branch=master)](https://travis-ci.org/amitayh/revent)
+# Revent [![Build Status](https://travis-ci.org/amitayh/revent.svg?branch=master)](https://travis-ci.org/amitayh/revent) [![codecov](https://codecov.io/gh/amitayh/revent/branch/master/graph/badge.svg)](https://codecov.io/gh/amitayh/revent)
 
 Revent is a lightweight event-sourcing library for Scala based on
 [cats](https://github.com/typelevel/cats), designed to stay out of your way
