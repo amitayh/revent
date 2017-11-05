@@ -9,11 +9,12 @@ import org.revent.{EventStoreContract, ExampleStream, MonadThrowable}
 
 import scala.concurrent.ExecutionContext.Implicits.{global => executionContext}
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class EventStoreEventStoreSpec extends EventStoreContract[Future] with EventStoreDockerTestKit {
 
   override def createStore(clock: Clock) = {
-    val config = EventStoreConfig()
+    val config = EventStoreConfig(timeout = 5.seconds)
 
     new EventStoreEventStore[ExampleStream](
       connection,

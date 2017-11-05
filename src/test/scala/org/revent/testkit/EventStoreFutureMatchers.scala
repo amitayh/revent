@@ -12,9 +12,9 @@ import scala.reflect.ClassTag
 object EventStoreFutureMatchers extends EventStoreMatchers[Future] {
   implicit val executionEnv = ExecutionEnv.fromExecutionContext(executionContext)
 
-  private val retries = 2
+  private val retries = 3
 
-  private val timeout = 2.seconds
+  private val timeout = 5.seconds
 
   override def succeedWith(matcher: Matcher[Result]): Matcher[Future[Result]] =
     matcher.await(retries, timeout)
