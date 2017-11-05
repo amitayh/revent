@@ -21,7 +21,9 @@ trait EventStoreContract[F[_]] extends Specification {
 
   val clock = Clock.fixed(now, ZoneOffset.UTC)
 
-  def createStore(clock: Clock): EventStore[F, ExampleStream]
+  def createReader: EventStreamReader[F, ExampleStream]
+
+  def createWriter: EventStreamWriter[F, ExampleStream]
 
   val matchers: EventStoreMatchers[F]
 
@@ -35,7 +37,8 @@ trait EventStoreContract[F[_]] extends Specification {
 
   "Event store" should {
     trait Context extends Scope {
-      val store = createStore(clock)
+      val reader = createReader
+      val writer = createWriter
 
       val streamId = UUID.randomUUID()
       val otherStreamId = UUID.randomUUID()
@@ -48,11 +51,11 @@ trait EventStoreContract[F[_]] extends Specification {
         beGreaterThanOrEqualTo(0) ^^ { (_: Instant) compareTo other }
       }
 
-      def eventWithVersion(version: Int): Matcher[Event[ExampleStream]] = {
+      def eventWithVersion(version: Version): Matcher[Event[ExampleStream]] = {
         equalTo(version) ^^ { (_: Event[ExampleStream]).version }
       }
 
-      def eventWith(version: Int, payload: ExampleEvent): Matcher[Event[ExampleStream]] = {
+      def eventWith(version: Version, payload: ExampleEvent): Matcher[Event[ExampleStream]] = {
         eventWithVersion(version) and
         equalTo(streamId) ^^ { (_: Event[ExampleStream]).streamId } and
         equalTo(payload) ^^ { (_: Event[ExampleStream]).payload }
@@ -66,100 +69,104 @@ trait EventStoreContract[F[_]] extends Specification {
     }
 
     "return empty stream if no events were saved" in new Context {
-      store.read(streamId, 1, 100) must succeedWith(beEmpty)
+      reader.read(streamId, 1, 100) must succeedWith(beEmpty)
+    }
+
+    "persist zero events" in new Context {
+      writer.persist(streamId, Nil) must succeedWith(beEmpty)
     }
 
     "persist one event" in new Context {
-      store.persist(streamId, eventPayload1 :: Nil) must
+      writer.persist(streamId, eventPayload1 :: Nil) must
         succeedWith(contain(event1))
     }
 
     "persist event for correct stream ID" in new Context {
       val result =
-        store.persist(streamId, eventPayload1 :: Nil) andThen
-          store.read(otherStreamId, 1, 100)
+        writer.persist(streamId, eventPayload1 :: Nil) andThen
+          reader.read(otherStreamId, 1, 100)
 
       result must succeedWith(beEmpty)
     }
 
     "persist multiple events" in new Context {
-      store.persist(streamId, eventPayload1 :: eventPayload2 :: Nil) must
+      writer.persist(streamId, eventPayload1 :: eventPayload2 :: Nil) must
         succeedWith(contain(allOf(event1, event2).inOrder))
     }
 
     "keep old events" in new Context {
       val result =
-        store.persist(streamId, eventPayload1 :: Nil) andThen
-          store.persist(streamId, eventPayload2 :: Nil) andThen
-          store.read(streamId, 1, 100)
+        writer.persist(streamId, eventPayload1 :: Nil) andThen
+          writer.persist(streamId, eventPayload2 :: Nil) andThen
+          reader.read(streamId, 1, 100)
 
       result must succeedWith(contain(allOf(event1, event2).inOrder))
     }
 
     "fetch persisted events" in new Context {
       val result =
-        store.persist(streamId, eventPayload1 :: eventPayload2 :: Nil) andThen
-          store.read(streamId, 1, 100)
+        writer.persist(streamId, eventPayload1 :: eventPayload2 :: Nil) andThen
+          reader.read(streamId, 1, 100)
 
       result must succeedWith(contain(allOf(event1, event2).inOrder))
     }
 
     "persist events with expected version" in new Context {
-      val persist1 = store.persist(streamId, eventPayload1 :: Nil, Some(0))
+      val persist1 = writer.persist(streamId, eventPayload1 :: Nil, Some(0))
       persist1 must succeedWith(contain(eventWithVersion(1)))
 
-      val persist2 = persist1 andThen store.persist(streamId, eventPayload2 :: Nil, Some(1))
+      val persist2 = persist1 andThen writer.persist(streamId, eventPayload2 :: Nil, Some(1))
       persist2 must succeedWith(contain(eventWithVersion(2)))
     }
 
     "fail if expected version doesn't match" in new Context {
       val result =
-        store.persist(streamId, eventPayload1 :: Nil, Some(0)) andThen
-          store.persist(streamId, eventPayload2 :: Nil, Some(0))
+        writer.persist(streamId, eventPayload1 :: Nil, Some(0)) andThen
+          writer.persist(streamId, eventPayload2 :: Nil, Some(0))
 
       result must failWith[ConcurrentModificationException]
     }
 
     "not allow version gaps" >> {
       "for first event" in new Context {
-        store.persist(streamId, eventPayload1 :: Nil, Some(1)) must fail
+        writer.persist(streamId, eventPayload1 :: Nil, Some(1)) must fail
       }
 
       "for subsequent events" in new Context {
         val result =
-          store.persist(streamId, eventPayload1 :: Nil, Some(0)) andThen
-            store.persist(streamId, eventPayload2 :: Nil, Some(2))
+          writer.persist(streamId, eventPayload1 :: Nil, Some(0)) andThen
+            writer.persist(streamId, eventPayload2 :: Nil, Some(2))
 
         result must fail
       }
     }
 
     "persist events atomically" in new Context {
-      val persist1 = store.persist(streamId, eventPayload1 :: Nil, Some(0))
+      val persist1 = writer.persist(streamId, eventPayload1 :: Nil, Some(0))
       persist1 must succeed
 
-      val persist2 = persist1 andThen store.persist(streamId, eventPayload2 :: eventPayload3 :: Nil, Some(0))
+      val persist2 = persist1 andThen writer.persist(streamId, eventPayload2 :: eventPayload3 :: Nil, Some(0))
       persist2 must fail
 
-      val read = persist2 andThen store.read(streamId, 1, 100)
+      val read = persist2 andThen reader.read(streamId, 1, 100)
       read must succeedWith(contain(exactly(event1)))
     }
 
     "fetch events from correct position" in new Context {
       val events = eventPayload1 :: eventPayload2 :: eventPayload3 :: eventPayload4 :: Nil
-      val persist = store.persist(streamId, events, Some(0))
+      val persist = writer.persist(streamId, events, Some(0))
 
-      val read1 = persist andThen store.read(streamId, 1, 3)
+      val read1 = persist andThen reader.read(streamId, 1, 3)
       read1 must succeedWith(contain(exactly(event1, event2, event3)))
 
-      val read2 = persist andThen store.read(streamId, 4, 3)
+      val read2 = persist andThen reader.read(streamId, 4, 3)
       read2 must succeedWith(contain(exactly(event4)))
     }
 
     "allow fetching from beginning of stream with version 0 (same as from version 1)" in new Context {
       val result =
-        store.persist(streamId, eventPayload1 :: eventPayload2 :: Nil) andThen
-          store.read(streamId, 0, 1)
+        writer.persist(streamId, eventPayload1 :: eventPayload2 :: Nil) andThen
+          reader.read(streamId, 0, 1)
 
       result must succeedWith(contain(exactly(event1)))
     }

@@ -3,8 +3,9 @@ package org.revent
 import java.time.{Clock, Instant, ZoneOffset}
 import java.util.UUID
 
-import cats.instances.try_._
-import org.revent.cqrs.{EventSourcedCommand, EventSourcedCommandHandler}
+import cats.data.Kleisli
+import cats.implicits._
+import org.revent.cqrs.{CommandHandled, EventSourcedCommand, EventSourcedCommandHandler}
 import org.revent.testkit.banking._
 import org.revent.testkit.banking.domain.{BankAccount, BankAccountOwner}
 import org.specs2.matcher.Matcher
@@ -23,14 +24,14 @@ class EventSourcingIntegrationSpec extends Specification {
       val clock = Clock.fixed(now, ZoneOffset.UTC)
       val eventStore = new InMemoryEventStore[BankAccountStream](clock)
       val repository = new ReplayingAggregateRepository[Try, BankAccountProtocol](eventStore, BankAccountReducer)
-      val handleCommand = new EventSourcedCommandHandler[Try, BankAccountProtocol](repository, eventStore)
+      val handleCommand = new EventSourcedCommandHandler[Try, BankAccountProtocol](repository, eventStore, BankAccountReducer)
       val publishEvents = new RecordingEventBus
-      val handlingFunction = handleCommand andThen publishEvents
+      val handlingFunction = Kleisli(handleCommand) andThen Kleisli(publishEvents)
 
       val accountId = UUID.randomUUID()
       val owner = BankAccountOwner("John", "Doe")
 
-      def handle(command: BankAccountCommand) = {
+      def handle(command: BankAccountCommand): Try[Unit] = {
         handlingFunction(EventSourcedCommand[Try, BankAccountProtocol](accountId, command))
       }
 
@@ -40,28 +41,29 @@ class EventSourcingIntegrationSpec extends Specification {
     }
 
     "apply multiple commands to an aggregate" in new Context {
-      handle(CreateBankAccount(owner, 10))
-      handle(Deposit(100))
-      handle(Deposit(20))
-      handle(Withdraw(50))
+      val result =
+        handle(CreateBankAccount(owner, 10)) >>
+          handle(Deposit(100)) >>
+          handle(Deposit(20)) >>
+          handle(Withdraw(50)) >>
+          repository.load(accountId)
 
-      repository.load(accountId) must
-        beSuccessfulTry(beSnapshotWithAggregate(BankAccount(owner, 80)))
+      result must beSuccessfulTry(beSnapshotWithAggregate(BankAccount(owner, 80)))
     }
 
     "use multiple aggregates on same event stream" in new Context {
-      handle(CreateBankAccount(owner, 20))
-      handle(Withdraw(5))
-
       val balanceRepository = new ReplayingAggregateRepository[Try, BankAccountBalanceProtocol](eventStore, BalanceReducer)
 
-      balanceRepository.load(accountId) must
-        beSuccessfulTry(beSnapshotWithAggregate(15.0))
+      val result =
+        handle(CreateBankAccount(owner, 20)) >>
+          handle(Withdraw(5)) >>
+          balanceRepository.load(accountId)
+
+      result must beSuccessfulTry(beSnapshotWithAggregate(15.0))
     }
 
     "publish successful events" in new Context {
-      handle(CreateBankAccount(owner, 10))
-      handle(Withdraw(20))
+      handle(CreateBankAccount(owner, 10)) >> handle(Withdraw(20))
 
       publishEvents.play must equalTo(
         Event[BankAccountStream](accountId, 1, BankAccountCreated(), now) ::
@@ -72,11 +74,11 @@ class EventSourcingIntegrationSpec extends Specification {
 
 }
 
-class RecordingEventBus extends (Try[Seq[Event[BankAccountStream]]] => Try[Unit]) {
+class RecordingEventBus extends (CommandHandled[BankAccountProtocol] => Try[Unit]) {
   private val recordedEvents = ListBuffer.empty[Event[BankAccountStream]]
 
-  override def apply(result: Try[Seq[Event[BankAccountStream]]]): Try[Unit] =
-    result.map(recordedEvents appendAll _)
+  override def apply(result: CommandHandled[BankAccountProtocol]): Try[Unit] =
+    Try(recordedEvents appendAll result.persistedEvents)
 
   def play: Seq[Event[BankAccountStream]] = recordedEvents.toList
 }

@@ -3,7 +3,6 @@ package org.revent
 import java.time.Clock
 import java.util.ConcurrentModificationException
 
-import org.revent.AggregateSnapshot.InitialVersion
 import org.revent.Event._
 
 import scala.collection.concurrent.{TrieMap, Map => ConcurrentMap}
@@ -16,7 +15,7 @@ class InMemoryEventStore[ES <: EventStream](clock: Clock = Clock.systemUTC()) ex
 
   override def persist(streamId: ES#Id,
                        events: Seq[ES#Payload],
-                       expectedVersion: Option[Int]): Try[Seq[Event[ES]]] = store.synchronized {
+                       expectedVersion: Option[Version]): Try[Seq[Event[ES]]] = store.synchronized {
     lastVersionFor(streamId, expectedVersion).map { lastVersion =>
       val now = clock.instant()
       val nextEvents = events.toEventStream(streamId, lastVersion, now)
@@ -26,20 +25,22 @@ class InMemoryEventStore[ES <: EventStream](clock: Clock = Clock.systemUTC()) ex
   }
 
   override def read(streamId: ES#Id,
-                    fromVersion: Int,
+                    fromVersion: Version,
                     maxCount: Int): Try[Seq[Event[ES]]] = Try {
     val fromIndex = (fromVersion - 1) max 0
     val toIndex = fromIndex + maxCount
     read(streamId).slice(fromIndex, toIndex)
   }
 
-  private def lastVersionFor(streamId: ES#Id, expectedVersion: Option[Int]): Try[Int] = {
+  private def lastVersionFor(streamId: ES#Id,
+                             expectedVersion: Option[Version]): Try[Version] = {
     val lastEvent = read(streamId).lastOption
-    val lastVersion = lastEvent.map(_.version).getOrElse(InitialVersion)
+    val lastVersion = lastEvent.map(_.version).getOrElse(Version.First)
     if (expectedVersion.exists(_ != lastVersion)) Failure(new ConcurrentModificationException())
     else Success(lastVersion)
   }
 
-  private def read(streamId: ES#Id): Seq[Event[ES]] = store.getOrElse(streamId, Vector.empty)
+  private def read(streamId: ES#Id): Seq[Event[ES]] =
+    store.getOrElse(streamId, Vector.empty)
 
 }

@@ -14,9 +14,8 @@ import io.circe.jawn.parseByteBuffer
 import io.circe.parser._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder}
-import org.revent.AggregateSnapshot.InitialVersion
 import org.revent.eventstore.EventStoreEventStore._
-import org.revent.{Event, EventStore, EventStream}
+import org.revent.{Event, EventStore, EventStream, Version}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Seq
@@ -37,19 +36,19 @@ class EventStoreEventStore[ES <: EventStream]
   implicit val timeout = Timeout(config.timeout)
 
   override def read(streamId: ES#Id,
-                    fromVersion: Int,
+                    fromVersion: Version,
                     maxCount: Int): Future[Seq[Event[ES]]] = {
     new EventStreamFetcher(streamId).read(fromVersion, maxCount)
   }
 
   override def persist(streamId: ES#Id,
                        events: Seq[ES#Payload],
-                       expectedVersion: Option[Int]): Future[Seq[Event[ES]]] = {
+                       expectedVersion: Option[Version]): Future[Seq[Event[ES]]] = {
     new EventStreamAppender(streamId).append(events, expectedVersion)
   }
 
   private class EventStreamFetcher(streamId: ES#Id) {
-    def read(fromVersion: Int, maxCount: Int): Future[Seq[Event[ES]]] = {
+    def read(fromVersion: Version, maxCount: Int): Future[Seq[Event[ES]]] = {
       val readEvents = readEventsBuilder(fromVersion, maxCount)
       (connection ? readEvents.build)
         .mapTo[ReadStreamEventsCompleted]
@@ -57,7 +56,7 @@ class EventStoreEventStore[ES <: EventStream]
         .recover(noStreamToEmptyPage)
     }
 
-    private def readEventsBuilder(fromVersion: Int, maxCount: Int): ReadStreamEventsBuilder = {
+    private def readEventsBuilder(fromVersion: Version, maxCount: Int): ReadStreamEventsBuilder = {
       val builder = new ReadStreamEventsBuilder(streamId.toString).maxCount(maxCount)
       if (fromVersion <= 1) builder.fromFirst
       else builder.fromNumber(fromVersion - 1)
@@ -92,7 +91,14 @@ class EventStoreEventStore[ES <: EventStream]
 
     private val metaData = EventMetaData(now).asJson.noSpaces
 
-    def append(events: Seq[ES#Payload], expectedVersion: Option[Int]): Future[Seq[Event[ES]]] = {
+    def append(events: Seq[ES#Payload],
+               expectedVersion: Option[Version]): Future[Seq[Event[ES]]] = {
+      if (events.isEmpty) Future.successful(Nil)
+      else appendNonEmpty(events, expectedVersion)
+    }
+
+    private def appendNonEmpty(events: Seq[ES#Payload],
+                               expectedVersion: Option[Version]): Future[Seq[Event[ES]]] = {
       val writeEvents = writeEventsBuilder(events, expectedVersion)
       val result = connection ? writeEvents.build
       result
@@ -102,11 +108,11 @@ class EventStoreEventStore[ES <: EventStream]
           transformException)
     }
 
-    private def writeEventsBuilder(events: Seq[ES#Payload], expectedVersion: Option[Int]) = {
+    private def writeEventsBuilder(events: Seq[ES#Payload], expectedVersion: Option[Version]) = {
       val eventsData = events.map(toEventData).asJava
       val builder = new WriteEventsBuilder(streamId.toString).addEvents(eventsData)
       expectedVersion match {
-        case Some(version) if version == InitialVersion => builder.expectNoStream
+        case Some(version) if version.isFirst => builder.expectNoStream
         case Some(version) => builder.expectVersion(version - 1)
         case _ => builder.expectAnyVersion
       }

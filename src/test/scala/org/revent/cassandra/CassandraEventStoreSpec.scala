@@ -1,17 +1,17 @@
 package org.revent.cassandra
 
-import java.time.Clock
-
-import cats.instances.future._
+import cats.instances.future.catsStdInstancesForFuture
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import org.revent._
 import org.revent.testkit.EventStoreFutureMatchers
-import org.revent.{EventStoreContract, ExampleStream, MonadThrowable}
 
 import scala.collection.immutable.Seq
 import scala.concurrent.ExecutionContext.Implicits.{global => executionContext}
 import scala.concurrent.Future
 
-class CassandraEventStoreSpec extends EventStoreContract[Future] with CassandraDockerTestKit {
+class CassandraEventStoreSpec
+  extends EventStoreContract[Future]
+    with CassandraDockerTestKit {
 
   override val schema: Seq[String] = {
     val statements = s"""
@@ -34,18 +34,22 @@ class CassandraEventStoreSpec extends EventStoreContract[Future] with CassandraD
     statements.split(";").toList
   }
 
-  override def createStore(clock: Clock) = {
-    new CassandraEventStore[ExampleStream](
+  override def createReader =
+    new CassandraEventStoreReader[ExampleStream](
+      session,
+      "events",
+      deriveDecoder)(executionContext)
+
+  override def createWriter =
+    new CassandraEventStoreWriter[ExampleStream](
       session,
       "events",
       deriveEncoder,
-      deriveDecoder,
       clock)(executionContext)
-  }
 
   override val matchers = EventStoreFutureMatchers
 
-  override val monadInstance: MonadThrowable[Future] =
+  override val monadInstance =
     catsStdInstancesForFuture(executionContext)
 
 }

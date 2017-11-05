@@ -1,21 +1,20 @@
 package org.revent.eventstore
 
-import java.time.Clock
-
 import cats.instances.future.catsStdInstancesForFuture
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import org.revent._
 import org.revent.testkit.EventStoreFutureMatchers
-import org.revent.{EventStoreContract, ExampleStream, MonadThrowable}
 
 import scala.concurrent.ExecutionContext.Implicits.{global => executionContext}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class EventStoreEventStoreSpec extends EventStoreContract[Future] with EventStoreDockerTestKit {
+class EventStoreEventStoreSpec
+  extends EventStoreContract[Future]
+    with EventStoreDockerTestKit {
 
-  override def createStore(clock: Clock) = {
+  private lazy val store = {
     val config = EventStoreConfig(timeout = 5.seconds)
-
     new EventStoreEventStore[ExampleStream](
       connection,
       deriveEncoder,
@@ -24,9 +23,13 @@ class EventStoreEventStoreSpec extends EventStoreContract[Future] with EventStor
       clock)(executionContext)
   }
 
+  override def createReader = store
+
+  override def createWriter = store
+
   override val matchers = EventStoreFutureMatchers
 
-  override val monadInstance: MonadThrowable[Future] =
+  override val monadInstance =
     catsStdInstancesForFuture(executionContext)
 
 }

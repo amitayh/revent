@@ -10,28 +10,28 @@ trait AggregateRepository[F[_], P <: Protocol] {
   type Snapshot = AggregateSnapshot[P#Aggregate]
 
   def load(aggregateId: P#EventStreamId,
-           expectedVersion: Option[Int] = None): F[Snapshot]
+           expectedVersion: Option[Version] = None): F[Snapshot]
 }
 
 class ReplayingAggregateRepository[F[_], P <: Protocol]
   (eventStream: EventStreamReader[F, P#EventStream],
    reducer: AggregateReducer[P],
    pageSize: Int = DefaultPageSize)
-  (implicit mi: MonadThrowable[F]) extends AggregateRepository[F, P] {
+  (implicit F: MonadThrowable[F]) extends AggregateRepository[F, P] {
 
   private val snapshotReducer = new SnapshotReducer[P](reducer)
 
   override def load(aggregateId: P#EventStreamId,
-                    expectedVersion: Option[Int]): F[Snapshot] = {
+                    expectedVersion: Option[Version]): F[Snapshot] = {
     reconstituteFromEvents(aggregateId).flatMap { snapshot =>
-      if (snapshot.conformsTo(expectedVersion)) mi.pure(snapshot)
-      else mi.raiseError(new VersionMismatch(aggregateId, expectedVersion, snapshot.version))
+      if (snapshot.conformsTo(expectedVersion)) F.pure(snapshot)
+      else F.raiseError(new VersionMismatch(aggregateId, expectedVersion, snapshot.version))
     }
   }
 
   private def reconstituteFromEvents(streamId: P#EventStreamId): F[Snapshot] = {
-    mi.tailRecM(snapshotReducer.empty) { snapshot =>
-      val nextVersion = snapshot.version + 1
+    F.tailRecM(snapshotReducer.empty) { snapshot =>
+      val nextVersion = snapshot.version.nextVersion
       eventStream.read(streamId, nextVersion, pageSize).map { events =>
         val consumedAllEvents = events.size < pageSize
         val updatedSnapshot = events.foldLeft(snapshot)(snapshotReducer.handle)
@@ -46,5 +46,5 @@ object ReplayingAggregateRepository {
   val DefaultPageSize = 512
 }
 
-class VersionMismatch[AggregateId](aggregateId: AggregateId, expected: Option[Int], actual: Int)
+class VersionMismatch[AggregateId](aggregateId: AggregateId, expected: Option[Version], actual: Version)
   extends RuntimeException(s"Aggregate $aggregateId expected to be at version $expected, actually at version $actual")

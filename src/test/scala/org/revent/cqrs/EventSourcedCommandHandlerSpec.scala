@@ -3,8 +3,8 @@ package org.revent.cqrs
 import java.time.{Clock, Instant, ZoneOffset}
 
 import cats.instances.try_._
+import org.revent._
 import org.revent.testkit.text._
-import org.revent.{Event, InMemoryEventStore, ReplayingAggregateRepository}
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
@@ -20,7 +20,7 @@ class EventSourcedCommandHandlerSpec extends Specification with Mockito {
       val eventStore = spy(new InMemoryEventStore[SentenceStream](clock))
       val repository = new ReplayingAggregateRepository[Try, SentenceProtocol](eventStore, SentenceReducer)
 
-      val handler = new EventSourcedCommandHandler[Try, SentenceProtocol](repository, eventStore)
+      val handler = new EventSourcedCommandHandler[Try, SentenceProtocol](repository, eventStore, SentenceReducer)
     }
 
     "persist events produced from applying a command on an aggregate" in new Context {
@@ -30,10 +30,14 @@ class EventSourcedCommandHandlerSpec extends Specification with Mockito {
       val word = "bar"
       val event = WordAdded(word)
       val command = AddWord(word)
-      val expectedVersion = Some(1)
+      val expectedVersion: Option[Version] = Some(1)
 
       handler(EventSourcedCommand[Try, SentenceProtocol](aggregateId, command, expectedVersion)) must
-        beSuccessfulTry(Event[SentenceStream](aggregateId, 2, event, now) :: Nil)
+        beSuccessfulTry(
+          CommandHandled[SentenceProtocol](
+            oldAggregate = "foo" :: Nil,
+            newAggregate = "foo" :: "bar" :: Nil,
+            persistedEvents = Event[SentenceStream](aggregateId, 2, event, now) :: Nil))
 
       there was one(eventStore).persist(aggregateId, event :: Nil, expectedVersion)
     }

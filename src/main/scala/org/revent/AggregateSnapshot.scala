@@ -2,29 +2,24 @@ package org.revent
 
 import java.time.Instant
 
-import org.revent.AggregateSnapshot.InitialVersion
 import org.revent.Reducer.AggregateReducer
 
 import scala.language.higherKinds
 
 case class AggregateSnapshot[Aggregate](aggregate: Aggregate,
-                                        version: Int,
+                                        version: Version,
                                         timestamp: Option[Instant] = None) {
 
-  def conformsTo(expectedVersion: Option[Int]): Boolean =
+  def conformsTo(expectedVersion: Option[Version]): Boolean =
     expectedVersion.forall(_ == version)
 
-}
-
-object AggregateSnapshot {
-  val InitialVersion = 0
 }
 
 class SnapshotReducer[P <: Protocol](aggregateReducer: AggregateReducer[P])
   extends Reducer[AggregateSnapshot[P#Aggregate], Event[P#EventStream]] {
 
   override val empty: AggregateSnapshot[P#Aggregate] =
-    AggregateSnapshot(aggregateReducer.empty, InitialVersion)
+    AggregateSnapshot(aggregateReducer.empty, Version.First)
 
   override def handle(snapshot: AggregateSnapshot[P#Aggregate],
                       event: Event[P#EventStream]): AggregateSnapshot[P#Aggregate] =
