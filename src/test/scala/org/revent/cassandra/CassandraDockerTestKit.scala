@@ -7,8 +7,11 @@ import com.whisk.docker.specs2.DockerTestKit
 import com.whisk.docker.{DockerContainer, DockerFactory, DockerReadyChecker}
 
 import scala.collection.immutable.Seq
+import scala.concurrent.duration._
 
 trait CassandraDockerTestKit extends DockerTestKit {
+
+  override val StartContainersTimeout = 1.minute
 
   private val cassandraHost = "127.0.0.1"
 

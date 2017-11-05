@@ -10,7 +10,11 @@ import com.whisk.docker.{DockerContainer, DockerFactory, DockerReadyChecker}
 import eventstore.j.SettingsBuilder
 import eventstore.tcp.ConnectionActor
 
+import scala.concurrent.duration._
+
 trait EventStoreDockerTestKit extends DockerTestKit {
+
+  override val StartContainersTimeout = 1.minute
 
   private val eventStoreHost = "127.0.0.1"
 
