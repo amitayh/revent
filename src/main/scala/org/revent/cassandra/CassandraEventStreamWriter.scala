@@ -11,7 +11,7 @@ import org.revent._
 import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
 
-class CassandraEventStoreWriter[ES <: EventStream]
+class CassandraEventStreamWriter[ES <: EventStream]
   (session: Session,
    tableName: String,
    encoder: Encoder[ES#Payload],

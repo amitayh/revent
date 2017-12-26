@@ -35,13 +35,13 @@ class CassandraEventStoreSpec
   }
 
   override def createReader =
-    new CassandraEventStoreReader[ExampleStream](
+    new CassandraEventStreamReader[ExampleStream](
       session,
       "events",
       deriveDecoder)(executionContext)
 
   override def createWriter =
-    new CassandraEventStoreWriter[ExampleStream](
+    new CassandraEventStreamWriter[ExampleStream](
       session,
       "events",
       deriveEncoder,

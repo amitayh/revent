@@ -20,11 +20,16 @@ class EventSourcingIntegrationSpec extends Specification {
 
   "Event sourcing example" should {
     trait Context extends Scope {
+      type EventStore = InMemoryEventStore[BankAccountStream]
+      type Repository = ReplayingAggregateRepository[Try, BankAccountProtocol]
+      type CommandHandler = EventSourcedCommandHandler[Try, BankAccountProtocol]
+      type Command = EventSourcedCommand[Try, BankAccountProtocol]
+
       val now = Instant.now()
       val clock = Clock.fixed(now, ZoneOffset.UTC)
-      val eventStore = new InMemoryEventStore[BankAccountStream](clock)
-      val repository = new ReplayingAggregateRepository[Try, BankAccountProtocol](eventStore, BankAccountReducer)
-      val handleCommand = new EventSourcedCommandHandler[Try, BankAccountProtocol](repository, eventStore, BankAccountReducer)
+      val eventStore = new EventStore(clock)
+      val repository = new Repository(eventStore, BankAccountReducer)
+      val handleCommand = new CommandHandler(repository, eventStore, BankAccountReducer)
       val publishEvents = new RecordingEventBus
       val handlingFunction = Kleisli(handleCommand) andThen Kleisli(publishEvents)
 
@@ -32,7 +37,7 @@ class EventSourcingIntegrationSpec extends Specification {
       val owner = BankAccountOwner("John", "Doe")
 
       def handle(command: BankAccountCommand): Try[Unit] = {
-        handlingFunction(EventSourcedCommand[Try, BankAccountProtocol](accountId, command))
+        handlingFunction(new Command(accountId, command))
       }
 
       def beSnapshotWithAggregate[T](aggregate: T): Matcher[AggregateSnapshot[T]] = {
@@ -52,7 +57,9 @@ class EventSourcingIntegrationSpec extends Specification {
     }
 
     "use multiple aggregates on same event stream" in new Context {
-      val balanceRepository = new ReplayingAggregateRepository[Try, BankAccountBalanceProtocol](eventStore, BalanceReducer)
+      type BalanceRepository = ReplayingAggregateRepository[Try, BankAccountBalanceProtocol]
+
+      val balanceRepository = new BalanceRepository(eventStore, BalanceReducer)
 
       val result =
         handle(CreateBankAccount(owner, 20)) >>

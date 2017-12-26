@@ -12,7 +12,7 @@ import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-class CassandraEventStoreReader[ES <: EventStream]
+class CassandraEventStreamReader[ES <: EventStream]
   (session: Session, tableName: String, decoder: Decoder[ES#Payload])
   (implicit executionContext: ExecutionContext = ExecutionContext.global)
   extends EventStreamReader[Future, ES] {

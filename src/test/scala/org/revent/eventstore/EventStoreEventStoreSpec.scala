@@ -13,19 +13,20 @@ class EventStoreEventStoreSpec
   extends EventStoreContract[Future]
     with EventStoreDockerTestKit {
 
-  private lazy val store = {
-    val config = EventStoreConfig(timeout = 5.seconds)
-    new EventStoreEventStore[ExampleStream](
+  val config = EventStoreConfig(timeout = 5.seconds)
+
+  override def createReader =
+    new EventStoreEventStreamReader[ExampleStream](
+      connection,
+      deriveDecoder,
+      config)(executionContext)
+
+  override def createWriter =
+    new EventStoreEventStreamWriter[ExampleStream](
       connection,
       deriveEncoder,
-      deriveDecoder,
       config,
       clock)(executionContext)
-  }
-
-  override def createReader = store
-
-  override def createWriter = store
 
   override val matchers = EventStoreFutureMatchers
 
