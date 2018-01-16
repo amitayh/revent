@@ -13,11 +13,13 @@ class EventSourcedCommandHandler[F[_]: FlatMap, P <: Protocol]
    reducer: AggregateReducer[P])
   extends (EventSourcedCommand[F, P] => F[CommandHandled[P]]) {
 
+  private val snapshotReducer = new SnapshotReducer[P](reducer)
+
   override def apply(command: EventSourcedCommand[F, P]): F[CommandHandled[P]] = for {
     snapshot <- repository.load(command.aggregateId, command.expectedVersion)
     commandEvents <- command.toEvents(snapshot.aggregate)
     persistedEvents <- eventStream.persist(command.aggregateId, commandEvents, Some(snapshot.version))
-    newAggregate = commandEvents.foldLeft(snapshot.aggregate)(reducer.handle)
-  } yield CommandHandled(snapshot.aggregate, newAggregate, persistedEvents)
+    updatedSnapshot = persistedEvents.foldLeft(snapshot)(snapshotReducer.handle)
+  } yield CommandHandled(snapshot, updatedSnapshot, persistedEvents)
 
 }

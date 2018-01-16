@@ -35,8 +35,8 @@ class EventSourcedCommandHandlerSpec extends Specification with Mockito {
       handler(EventSourcedCommand[Try, SentenceProtocol](aggregateId, command, expectedVersion)) must
         beSuccessfulTry(
           CommandHandled[SentenceProtocol](
-            oldAggregate = "foo" :: Nil,
-            newAggregate = "foo" :: "bar" :: Nil,
+            oldAggregate = AggregateSnapshot("foo" :: Nil, 1, Some(now)),
+            newAggregate = AggregateSnapshot("foo" :: "bar" :: Nil, 2, Some(now)),
             persistedEvents = Event[SentenceStream](aggregateId, 2, event, now) :: Nil))
 
       there was one(eventStore).persist(aggregateId, event :: Nil, expectedVersion)

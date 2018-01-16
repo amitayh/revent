@@ -1,10 +1,10 @@
 package org.revent.cqrs
 
-import org.revent.{Event, Protocol}
+import org.revent.{AggregateSnapshot, Event, Protocol}
 
 import scala.collection.immutable.Seq
 
 case class CommandHandled[P <: Protocol]
-  (oldAggregate: P#Aggregate,
-   newAggregate: P#Aggregate,
+  (oldAggregate: AggregateSnapshot[P#Aggregate],
+   newAggregate: AggregateSnapshot[P#Aggregate],
    persistedEvents: Seq[Event[P#EventStream]])

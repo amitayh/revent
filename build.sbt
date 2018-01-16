@@ -1,8 +1,23 @@
 name := "revent"
 
-version := "0.1.1-SNAPSHOT"
+version := "0.1.2-SNAPSHOT"
 
 scalaVersion := "2.12.2"
+
+homepage := Some(url("https://github.com/amitayh/revent"))
+scmInfo := Some(ScmInfo(url("https://github.com/amitayh/revent"), "git@github.com:amitayh/revent.git"))
+developers := List(
+  Developer(
+    "amitayh",
+    "Amitay Horwitz",
+    "amitayh@gmail.com",
+    url("https://github.com/amitayh")))
+licenses += ("MIT", url("https://opensource.org/licenses/MIT"))
+publishMavenStyle := true
+publishTo := Some(
+  if (isSnapshot.value) Opts.resolver.sonatypeSnapshots
+  else Opts.resolver.sonatypeStaging
+)
 
 libraryDependencies ++= Seq(
   // Core
