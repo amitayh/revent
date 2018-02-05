@@ -3,13 +3,13 @@
 Revent is a lightweight event-sourcing library for Scala based on
 [cats](https://github.com/typelevel/cats), designed to stay out of your way
 
-The name "revent" is a [portmanteau](https://en.wikipedia.org/wiki/Portmanteau) for *reduce* + 
+The name "revent" is a [portmanteau](https://en.wikipedia.org/wiki/Portmanteau) of *reduce* + 
 *event*
 
 ## Event Sourcing 101
 
 Event sourcing is an architectural pattern in which you model your application dat, by capturing a
-sequence of immutable events. The topic was discussed in length by people like
+sequence of immutable events. The topic was discussed at some length by
 [Greg Young](https://twitter.com/gregyoung), [Udi Dahan](https://twitter.com/UdiDahan),
 [Martin Fowler](https://twitter.com/martinfowler) and others. It is recommended to study the
 benefits and disadvantages of using event sourcing beforehand.
@@ -19,7 +19,7 @@ Recommended materials:
  * https://www.youtube.com/watch?v=8JKjvY4etTY
  * https://martinfowler.com/eaaDev/EventSourcing.html
 
-## Main Components
+## Main Concepts
 
 ### Protocols
 
